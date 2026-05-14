@@ -1,10 +1,15 @@
 include(GoogleTest)
 
 add_executable(dlt645_tests
+    test_bcd_codec.cpp
+    test_address.cpp
     test_frame.cpp
+    test_frame_codec.cpp
     test_data_item.cpp
+    test_frame_transceiver.cpp
     test_meter_reader.cpp
     test_config.cpp
+    test_result_reporter.cpp
     test_scheduler.cpp
 )
 

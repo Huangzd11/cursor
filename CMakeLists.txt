@@ -35,11 +35,19 @@ FetchContent_MakeAvailable(yaml-cpp)
 
 # 主程序库（供测试和主程序共用）
 add_library(dlt645_lib STATIC
+    # 协议层
+    src/protocol/bcd_codec.cpp
+    src/protocol/address.cpp
     src/protocol/frame.cpp
+    src/protocol/frame_codec.cpp
     src/protocol/data_item.cpp
+    # 传输层
     src/transport/serial_port.cpp
-    src/app/meter_reader.cpp
+    src/transport/frame_transceiver.cpp
+    # 应用层
     src/app/config.cpp
+    src/app/meter_reader.cpp
+    src/app/result_reporter.cpp
     src/app/scheduler.cpp
 )
 target_include_directories(dlt645_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

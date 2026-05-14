@@ -1,0 +1,44 @@
+#pragma once
+
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "app/config.h"
+#include "app/meter_reader.h"
+
+namespace dlt645 {
+
+// 轮询调度器：按配置间隔循环采集所有电表的所有数据项
+class Scheduler {
+public:
+    using ResultCallback = std::function<void(
+        const std::string& meter_name,
+        const std::string& item_name,
+        MeterReader::ErrorCode code,
+        std::optional<MeterReader::ReadResult> result)>;
+
+    Scheduler(std::shared_ptr<MeterReader> reader,
+              const AppConfig& config);
+
+    // 启动轮询（阻塞，直到调用 stop()）
+    void run();
+
+    // 停止轮询（可从其他线程调用）
+    void stop();
+
+    // 执行一轮采集
+    void poll_once();
+
+    void set_result_callback(ResultCallback callback);
+
+private:
+    std::shared_ptr<MeterReader> reader_;
+    AppConfig config_;
+    std::atomic<bool> running_{false};
+    ResultCallback callback_;
+};
+
+}  // namespace dlt645
