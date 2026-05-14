@@ -24,21 +24,21 @@
 系统分为三层：
 
 ```
-┌─────────────────────────────────────┐
-│            应用层 (app/)             │
-│  Scheduler / Config / MeterReader   │
-├─────────────────────────────────────┤
-│           协议层 (protocol/)         │
-│       Frame / DataItem              │
-├─────────────────────────────────────┤
-│           传输层 (transport/)        │
-│     IChannel / SerialPort           │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      应用层 (app/)                        │
+│  Config / MeterReader / Scheduler / ResultReporter       │
+├──────────────────────────────────────────────────────────┤
+│                      协议层 (protocol/)                   │
+│  BcdCodec / Address / Frame / FrameCodec / DataItem      │
+├──────────────────────────────────────────────────────────┤
+│                      传输层 (transport/)                  │
+│  IChannel / SerialPort / FrameTransceiver                │
+└──────────────────────────────────────────────────────────┘
 ```
 
-- **传输层**：封装串口读写，提供 IChannel 抽象接口便于测试
-- **协议层**：实现 645 协议帧的组装/解析、数据标识的 BCD 编解码
-- **应用层**：读表操作、轮询调度、配置管理、日志输出
+- **传输层**：封装串口读写（IChannel / SerialPort），提供帧级收发能力（FrameTransceiver）
+- **协议层**：BCD 编解码工具（BcdCodec）、电表地址处理（Address）、帧结构与编解码（Frame / FrameCodec）、数据标识定义与值解码（DataItem）
+- **应用层**：配置管理（Config）、读表操作（MeterReader）、轮询调度（Scheduler）、结果输出（ResultReporter）
 
 ## 三、DL/T 645-2007 协议要点
 
@@ -88,80 +88,316 @@ FE FE FE FE 68 A0 A1 A2 A3 A4 A5 68 C L D0...Dn CS 16
 
 ## 四、核心模块设计
 
-### 4.1 Frame（协议帧）
+### 4.1 BcdCodec（BCD 编解码工具）
+
+纯工具类，提供 BCD 编解码和 0x33 加减操作，被 Frame、DataItem、Address 等模块共用。
+
+```cpp
+namespace BcdCodec {
+    // BCD字节序列 → 整数值（如 0x12 0x34 → 1234）
+    uint64_t decode(const uint8_t* data, size_t len);
+
+    // BCD字节序列 → 浮点值（指定小数位数，如 0x12 0x34 + 2位小数 → 12.34）
+    double decode_float(const uint8_t* data, size_t len, int decimal_digits);
+
+    // 整数值 → BCD字节序列（指定输出长度）
+    std::vector<uint8_t> encode(uint64_t value, size_t len);
+
+    // 数据域加0x33（发送前处理）
+    std::vector<uint8_t> add33(const std::vector<uint8_t>& data);
+
+    // 数据域减0x33（接收后处理）
+    std::vector<uint8_t> sub33(const std::vector<uint8_t>& data);
+}
+```
+
+### 4.2 Address（电表地址）
+
+封装电表通信地址的解析、校验和格式转换。
+
+```cpp
+class Address {
+public:
+    // 从12位十六进制字符串构造（如 "000000000001"）
+    static std::optional<Address> from_string(const std::string& hex_str);
+
+    // 从6字节BCD数组构造
+    static Address from_bytes(const std::array<uint8_t, 6>& bytes);
+
+    // 获取原始6字节（低位在前，用于帧组装）
+    const std::array<uint8_t, 6>& bytes() const;
+
+    // 转为可读字符串
+    std::string to_string() const;
+
+    // 是否为广播地址（0x999999999999）
+    bool is_broadcast() const;
+
+    bool operator==(const Address& other) const;
+
+private:
+    std::array<uint8_t, 6> bytes_;
+};
+```
+
+### 4.3 Frame（协议帧结构）
+
+仅负责帧的结构化表示，不涉及通信。
 
 ```cpp
 struct Frame {
-    std::array<uint8_t, 6> address;  // 电表地址（原始BCD，低位在前）
-    uint8_t control;                  // 控制码
-    std::vector<uint8_t> data;        // 数据域（减0x33后的原始数据）
+    Address address;                   // 电表地址
+    uint8_t control;                   // 控制码
+    std::vector<uint8_t> data;         // 数据域（已减0x33的原始数据）
 
-    // 组装为完整帧字节流（含前导符）
-    std::vector<uint8_t> encode() const;
+    // 是否为异常应答帧
+    bool is_error_response() const;
 
-    // 从字节流中解析帧（自动跳过前导符0xFE）
-    static std::optional<Frame> decode(const std::vector<uint8_t>& bytes);
+    // 获取异常应答的错误码（仅当 is_error_response() 为 true）
+    uint8_t error_code() const;
 };
 ```
 
-### 4.2 DataItem（数据标识）
+### 4.4 FrameCodec（帧编解码器）
+
+负责帧与字节流之间的转换，包括校验和计算。
+
+```cpp
+namespace FrameCodec {
+    // 将Frame编码为完整字节流（含前导符0xFE、0x33加操作、校验和）
+    std::vector<uint8_t> encode(const Frame& frame);
+
+    // 从字节流解析Frame（自动跳过前导符、0x33减操作、校验和验证）
+    // 返回解析结果和已消费的字节数
+    struct DecodeResult {
+        Frame frame;
+        size_t bytes_consumed;
+    };
+    std::optional<DecodeResult> decode(const std::vector<uint8_t>& bytes);
+
+    // 计算校验和（从第一个0x68到数据域末尾的模256和）
+    uint8_t calc_checksum(const uint8_t* data, size_t len);
+}
+```
+
+### 4.5 DataItem（数据标识定义）
+
+描述一个可采集的数据项元信息，并提供值解码能力。
 
 ```cpp
 struct DataItem {
-    uint32_t di;           // 4字节数据标识
-    std::string name;      // 可读名称
-    int data_length;       // 数据字段长度（字节数）
+    uint32_t di;           // 4字节数据标识（如 0x00010000）
+    std::string name;      // 可读名称（如 "正向有功总电能"）
+    int data_length;       // 数据字段长度（字节数，不含DI本身）
     int decimal_digits;    // 小数位数
-    std::string unit;      // 单位
+    std::string unit;      // 单位（如 "kWh"）
 
-    // 将原始BCD字节解码为浮点数值
-    double decode_value(const std::vector<uint8_t>& raw) const;
-
-    // 将DI编码为4字节（用于组装请求帧数据域，需加0x33）
+    // 将DI编码为4字节序列（低位在前，用于组装请求帧数据域）
     std::vector<uint8_t> encode_di() const;
+
+    // 将应答帧中的原始BCD数据解码为浮点数值
+    double decode_value(const std::vector<uint8_t>& raw) const;
 };
 ```
 
-### 4.3 IChannel（通信通道接口）
+### 4.6 IChannel（通信通道接口）
+
+传输层抽象，隔离底层通信方式，便于单元测试时注入 MockChannel。
 
 ```cpp
 class IChannel {
 public:
     virtual ~IChannel() = default;
+
+    // 打开通道
     virtual bool open() = 0;
+
+    // 关闭通道
     virtual void close() = 0;
+
+    // 发送数据，返回是否成功
     virtual bool send(const std::vector<uint8_t>& data) = 0;
+
+    // 接收数据，最多等待 timeout_ms 毫秒
+    // 返回实际收到的字节（可能少于 max_bytes）
     virtual std::vector<uint8_t> receive(size_t max_bytes, int timeout_ms) = 0;
+
+    // 通道是否已打开
+    virtual bool is_open() const = 0;
 };
 ```
 
-### 4.4 SerialPort（串口实现）
+### 4.7 SerialPort（串口实现）
 
-基于 Linux termios API，默认参数：2400bps、8数据位、1停止位、偶校验。
+IChannel 的 Linux 串口实现，基于 termios API。
 
-### 4.5 MeterReader（读表器）
+```cpp
+class SerialPort : public IChannel {
+public:
+    struct Config {
+        std::string device;     // 设备路径，如 "/dev/ttyUSB0"
+        int baudrate = 2400;    // 波特率
+        int databits = 8;       // 数据位
+        int stopbits = 1;       // 停止位
+        char parity = 'E';      // 校验：'N'无/'E'偶/'O'奇
+    };
+
+    explicit SerialPort(const Config& config);
+
+    bool open() override;
+    void close() override;
+    bool send(const std::vector<uint8_t>& data) override;
+    std::vector<uint8_t> receive(size_t max_bytes, int timeout_ms) override;
+    bool is_open() const override;
+
+private:
+    Config config_;
+    int fd_ = -1;
+};
+```
+
+### 4.8 FrameTransceiver（帧收发器）
+
+在 IChannel 之上封装帧级别的发送/接收逻辑，处理字节流中的帧边界识别和超时管理。
+
+```cpp
+class FrameTransceiver {
+public:
+    explicit FrameTransceiver(std::shared_ptr<IChannel> channel);
+
+    // 发送一帧（自动编码）
+    bool send_frame(const Frame& frame);
+
+    // 接收一帧完整应答（处理部分读取、前导符跳过、帧边界检测）
+    // timeout_ms 为整体超时，内部可能多次调用 channel->receive()
+    std::optional<Frame> receive_frame(int timeout_ms);
+
+private:
+    std::shared_ptr<IChannel> channel_;
+    std::vector<uint8_t> recv_buffer_;  // 接收缓冲区，处理跨次读取的粘包
+};
+```
+
+### 4.9 MeterReader（读表器）
+
+单次读表操作的封装，职责：组装请求帧、收发交互、应答校验、值提取。
 
 ```cpp
 class MeterReader {
 public:
-    explicit MeterReader(std::shared_ptr<IChannel> channel);
+    explicit MeterReader(std::shared_ptr<FrameTransceiver> transceiver);
+
+    // 读取结果
+    struct ReadResult {
+        double value;
+        std::string unit;
+    };
+
+    // 读取失败的原因
+    enum class ErrorCode {
+        kSuccess,
+        kSendFailed,       // 发送失败
+        kTimeout,          // 接收超时
+        kAddressMismatch,  // 应答地址不匹配
+        kErrorResponse,    // 电表返回异常应答
+        kDataMismatch,     // 应答数据标识不匹配
+        kDecodeFailed      // 数据解码失败
+    };
 
     // 读取指定电表的指定数据项
-    std::optional<double> read_data(
-        const std::array<uint8_t, 6>& address,
+    std::pair<ErrorCode, std::optional<ReadResult>> read_data(
+        const Address& address,
         const DataItem& item);
+
+private:
+    // 构造读数据请求帧
+    Frame build_request(const Address& address, const DataItem& item);
+
+    // 校验应答帧（地址匹配、控制码、数据标识匹配）
+    ErrorCode validate_response(const Frame& response,
+                                const Address& expected_addr,
+                                const DataItem& expected_item);
+
+    std::shared_ptr<FrameTransceiver> transceiver_;
 };
 ```
 
-内部流程：构造请求帧 → 发送 → 接收应答 → 解析验证 → 解码数据。
+### 4.10 Config（配置管理）
 
-### 4.6 Config（配置管理）
+YAML 配置文件的解析和校验，将配置文件转为类型安全的结构体。
 
-使用 YAML 格式配置文件，定义串口参数、电表列表和数据项列表。
+```cpp
+struct AppConfig {
+    SerialPort::Config serial;            // 串口配置
+    std::vector<MeterConfig> meters;      // 电表列表
+    std::vector<DataItem> data_items;     // 采集数据项列表
+    int poll_interval_seconds;            // 轮询间隔（秒）
+};
 
-### 4.7 Scheduler（轮询调度）
+struct MeterConfig {
+    Address address;
+    std::string name;
+};
 
-按配置的轮询间隔，循环遍历每块电表的每个数据项进行采集，结果通过日志输出。
+class Config {
+public:
+    // 从YAML文件加载配置
+    static std::optional<AppConfig> load(const std::string& filepath);
+
+    // 校验配置合法性（地址格式、DI长度、波特率范围等）
+    static std::vector<std::string> validate(const AppConfig& config);
+};
+```
+
+### 4.11 Scheduler（轮询调度器）
+
+按配置的时间间隔，循环遍历每块电表的每个数据项进行采集。
+
+```cpp
+class Scheduler {
+public:
+    Scheduler(std::shared_ptr<MeterReader> reader,
+              const AppConfig& config);
+
+    // 启动轮询（阻塞，直到调用 stop()）
+    void run();
+
+    // 停止轮询（可从其他线程调用）
+    void stop();
+
+    // 执行一轮采集（遍历所有电表的所有数据项）
+    void poll_once();
+
+    // 设置采集结果回调
+    using ResultCallback = std::function<void(
+        const std::string& meter_name,
+        const std::string& item_name,
+        MeterReader::ErrorCode code,
+        std::optional<MeterReader::ReadResult> result)>;
+    void set_result_callback(ResultCallback callback);
+
+private:
+    std::shared_ptr<MeterReader> reader_;
+    AppConfig config_;
+    std::atomic<bool> running_{false};
+    ResultCallback callback_;
+};
+```
+
+### 4.12 ResultReporter（结果输出）
+
+将采集结果格式化并通过日志输出，与采集逻辑解耦。
+
+```cpp
+class ResultReporter {
+public:
+    // 作为 Scheduler 的回调使用
+    void report(const std::string& meter_name,
+                const std::string& item_name,
+                MeterReader::ErrorCode code,
+                std::optional<MeterReader::ReadResult> result);
+};
+```
 
 ## 五、配置文件格式
 
@@ -205,9 +441,13 @@ poll_interval_seconds: 60
 
 按依赖关系从底向上，每步先写测试再实现：
 
-1. Frame 帧编解码（纯逻辑，无外部依赖）
-2. DataItem BCD 编解码
-3. SerialPort 串口通信
-4. MeterReader 读表流程（使用 MockChannel）
-5. Config 配置解析
-6. Scheduler 轮询调度 + 集成测试
+1. BcdCodec BCD 编解码与 0x33 加减（纯函数，无依赖）
+2. Address 电表地址解析与校验（依赖 BcdCodec）
+3. Frame + FrameCodec 帧结构与编解码（依赖 BcdCodec、Address）
+4. DataItem 数据标识编码与值解码（依赖 BcdCodec）
+5. SerialPort 串口通信（Linux termios）
+6. FrameTransceiver 帧收发器（使用 MockChannel 测试）
+7. MeterReader 读表流程（使用 Mock FrameTransceiver 测试）
+8. Config 配置解析与校验
+9. ResultReporter 结果输出
+10. Scheduler 轮询调度 + 集成测试
