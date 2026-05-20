@@ -14,8 +14,10 @@ std::vector<uint8_t> DataItem::encode_di() const {
 }
 
 double DataItem::decode_value(const std::vector<uint8_t>& raw) const {
-    // TODO: 使用BcdCodec解码BCD数据为浮点值
-    return 0.0;
+    if (raw.empty()) {
+        return 0.0;
+    }
+    return BcdCodec::decode_float(raw.data(), raw.size(), decimal_digits);
 }
 
 }  // namespace dlt645

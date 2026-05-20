@@ -2,10 +2,12 @@
 
 ## 环境说明
 
-| 环境 | 用途 |
-|------|------|
-| 开发机（x86_64 Linux） | 编写代码、运行单元测试、交叉编译 |
+
+| 环境                  | 用途                         |
+| ------------------- | -------------------------- |
+| 开发机（x86_64 Linux）   | 编写代码、运行单元测试、交叉编译           |
 | OpenWrt 网关（aarch64） | 运行 `dlt645_collector` 采集程序 |
+
 
 交叉编译工具链：`openwrt-gcc-8.3.0.tar.gz`（OpenWrt GCC 8.3.0，目标 `aarch64-openwrt-linux-musl`）。
 
@@ -35,9 +37,10 @@ tar -xzf openwrt-gcc-8.3.0.tar.gz
 
 产物路径：`build-cross/dlt645_collector`。
 
-手动方式：
+手动方式（须先导出 `STAGING_DIR`，否则 gcc 会打印警告）：
 
 ```bash
+export STAGING_DIR="$(pwd)/openwrt-gcc-8.3.0"
 cmake -S . -B build-cross \
     -DCMAKE_TOOLCHAIN_FILE=cmake/openwrt-aarch64.cmake \
     -DCMAKE_BUILD_TYPE=Release
@@ -49,13 +52,13 @@ cmake --build build-cross -j$(nproc)
 将可执行文件与配置文件拷贝到网关，例如：
 
 ```bash
-scp build-cross/dlt645_collector config.yaml root@<网关IP>:/opt/dlt645/
+scp -P 35520 build-cross/dlt645_collector   admin@172.21.9.146:/userdata/admin/huangzd/em645
 ```
 
 在网关上运行：
 
 ```bash
-./dlt645_collector config.yaml
+./dlt645_collector config/collector.yaml
 ```
 
 串口设备路径以网关实际为准（如 `/dev/ttyS1`）。

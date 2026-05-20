@@ -1,6 +1,6 @@
 # DL/T 645-2007 电能表数据采集程序 - 设计文档
 
-> 项目总览（需求、系统/项目架构、数据模型、技术选型、开发计划、使用指南）见 [project.md](project.md)。本文档侧重协议要点与模块接口设计。
+> 项目总览（需求、系统/项目架构、数据模型、技术选型、开发计划、使用指南）见 [project.md](project.md)。技术难点与创新点见 [technical-highlights.md](technical-highlights.md)。本文档侧重协议要点与模块接口设计。
 
 ## 一、概述
 
@@ -90,6 +90,9 @@ FE FE FE FE 68 A0 A1 A2 A3 A4 A5 68 C L D0...Dn CS 16
 | 02 01 01 00      | A相电压        | 2 bytes| XXX.X      |
 | 02 02 01 00      | A相电流        | 3 bytes| XXX.XXX    |
 | 02 03 00 00      | 瞬时总有功功率 | 3 bytes| XX.XXXX    |
+| 02 03 01 00      | 当前有功功率   | 3 bytes| XX.XXXX    |
+| 02 05 01 00      | 当前视在功率   | 3 bytes| XX.XXXX    |
+| 02 06 01 00      | 当前功率因数   | 2 bytes| X.XXX      |
 | 02 06 00 00      | 频率           | 2 bytes| XX.XX      |
 
 ### 3.4 数据域加减 0x33
@@ -314,8 +317,9 @@ public:
         kDecodeFailed      // 数据解码失败
     };
 
-    // 读取指定电表的指定数据项
+    // 读取指定电表的指定数据项（meter_name 为配置中的可读名称，用于日志）
     std::pair<ErrorCode, std::optional<ReadResult>> read_data(
+        std::string_view meter_name,
         const Address& address,
         const DataItem& item);
 

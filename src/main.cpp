@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include "app/config.h"
+#include "app/logging.h"
 #include "app/meter_reader.h"
 #include "app/result_reporter.h"
 #include "app/scheduler.h"
@@ -15,12 +16,14 @@ static dlt645::Scheduler* g_scheduler = nullptr;
 
 static void signal_handler(int sig) {
     if (g_scheduler) {
-        spdlog::info("收到信号 {}，正在停止...", sig);
+        SPDLOG_INFO("收到信号 {}，正在停止...", sig);
         g_scheduler->stop();
     }
 }
 
 int main(int argc, char* argv[]) {
+    dlt645::init_logging();
+
     std::string config_path = "config/collector.yaml";
     if (argc > 1) {
         config_path = argv[1];
@@ -29,14 +32,14 @@ int main(int argc, char* argv[]) {
     // 加载配置
     auto config = dlt645::Config::load(config_path);
     if (!config) {
-        spdlog::error("配置加载失败，退出");
+        SPDLOG_ERROR("配置加载失败，退出");
         return 1;
     }
 
     auto errors = dlt645::Config::validate(*config);
     if (!errors.empty()) {
         for (const auto& err : errors) {
-            spdlog::error("配置校验: {}", err);
+            SPDLOG_ERROR("配置校验: {}", err);
         }
         return 1;
     }
@@ -44,7 +47,7 @@ int main(int argc, char* argv[]) {
     // 构建组件链: SerialPort → FrameTransceiver → MeterReader → Scheduler
     auto serial = std::make_shared<dlt645::SerialPort>(config->serial);
     if (!serial->open()) {
-        spdlog::error("串口打开失败: {}", config->serial.device);
+        SPDLOG_ERROR("串口打开失败: {}", config->serial.device);
         return 1;
     }
 
@@ -67,7 +70,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    spdlog::info("DL/T 645 数据采集程序启动");
+    SPDLOG_INFO("DL/T 645 数据采集程序启动");
     scheduler.run();
 
     return 0;

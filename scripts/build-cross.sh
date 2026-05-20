@@ -12,6 +12,9 @@ if [[ ! -d "${TOOLCHAIN_DIR}/bin" ]]; then
     tar -xzf "${TOOLCHAIN_TAR}" -C "${ROOT}"
 fi
 
+# OpenWrt 工具链 gcc 会检查 STAGING_DIR；须在 configure/build 全程导出
+export STAGING_DIR="${TOOLCHAIN_DIR}"
+
 cmake -S "${ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${ROOT}/cmake/openwrt-aarch64.cmake" \
     -DCMAKE_BUILD_TYPE=Release

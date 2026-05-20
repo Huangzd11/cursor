@@ -1,16 +1,46 @@
 #include "app/meter_reader.h"
 
+#include <cstdio>
+#include <string>
+
 #include <spdlog/spdlog.h>
 
+#include "protocol/frame_codec.h"
+
 namespace dlt645 {
+
+namespace {
+
+// 将线路字节格式化为空格分隔的大写十六进制，便于对照示波器/抓包
+std::string format_hex_bytes(const std::vector<uint8_t>& bytes) {
+    std::string s;
+    s.reserve(bytes.size() * 3);
+    for (size_t i = 0; i < bytes.size(); ++i) {
+        if (i) {
+            s.push_back(' ');
+        }
+        char buf[4];
+        std::snprintf(buf, sizeof(buf), "%02X", bytes[i]);
+        s += buf;
+    }
+    return s;
+}
+
+}  // namespace
 
 MeterReader::MeterReader(std::shared_ptr<FrameTransceiver> transceiver)
     : transceiver_(std::move(transceiver)) {}
 
 std::pair<MeterReader::ErrorCode, std::optional<MeterReader::ReadResult>>
-MeterReader::read_data(const Address& address, const DataItem& item) {
-    // 构造请求帧
+MeterReader::read_data(std::string_view meter_name,
+                       const Address& address,
+                       const DataItem& item) {
+    // 构造请求帧并打印完整线路字节（含前导符、加 0x33 后的数据域）
     auto request = build_request(address, item);
+    const auto wire = FrameCodec::encode(request);
+    SPDLOG_INFO(
+        "采集指令 | 表名={} | 电表地址={} | 数据项={} | DI=0x{:08X} | 帧={}",
+        meter_name, address.to_string(), item.name, item.di, format_hex_bytes(wire));
 
     // 发送
     if (!transceiver_->send_frame(request)) {

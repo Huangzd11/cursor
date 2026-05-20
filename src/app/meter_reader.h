@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "protocol/address.h"
@@ -32,8 +33,9 @@ public:
 
     explicit MeterReader(std::shared_ptr<FrameTransceiver> transceiver);
 
-    // 读取指定电表的指定数据项
+    // 读取指定电表的指定数据项（meter_name 用于日志，与 YAML 中 name 一致）
     std::pair<ErrorCode, std::optional<ReadResult>> read_data(
+        std::string_view meter_name,
         const Address& address,
         const DataItem& item);
 

@@ -13,7 +13,7 @@ Scheduler::Scheduler(std::shared_ptr<MeterReader> reader,
 
 void Scheduler::run() {
     running_ = true;
-    spdlog::info("采集调度器已启动，轮询间隔 {} 秒", config_.poll_interval_seconds);
+    SPDLOG_INFO("采集调度器已启动，轮询间隔 {} 秒", config_.poll_interval_seconds);
 
     while (running_) {
         poll_once();
@@ -24,7 +24,7 @@ void Scheduler::run() {
         }
     }
 
-    spdlog::info("采集调度器已停止");
+    SPDLOG_INFO("采集调度器已停止");
 }
 
 void Scheduler::stop() {
@@ -34,7 +34,8 @@ void Scheduler::stop() {
 void Scheduler::poll_once() {
     for (const auto& meter : config_.meters) {
         for (const auto& item : config_.data_items) {
-            auto [code, result] = reader_->read_data(meter.address, item);
+            auto [code, result] =
+                reader_->read_data(meter.name, meter.address, item);
 
             if (callback_) {
                 callback_(meter.name, item.name, code, result);

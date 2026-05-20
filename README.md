@@ -7,7 +7,7 @@
 - **本地测试**：`cmake -S . -B build && cmake --build build && ctest --test-dir build`
 - **交叉编译（OpenWrt 网关）**：`./scripts/build-cross.sh`
 
-详见 [document/build.md](document/build.md)。
+详见 [document/build.md](document/build.md)。技术难点与创新点见 [document/technical-highlights.md](document/technical-highlights.md)。
 
 ## 运行（网关）
 

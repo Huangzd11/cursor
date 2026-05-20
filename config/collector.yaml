@@ -1,33 +1,48 @@
 serial:
-  device: "/dev/ttyUSB0"
+  device: "/dev/plugin/ttyRS0_2"
   baudrate: 2400
 
 meters:
   - address: "000000000005"
-    name: "1号电表"
+    name: "meter-1"
   - address: "000000000002"
-    name: "2号电表"
+    name: "meter-2"
 
 data_items:
   - di: "00010000"
-    name: "正向有功总电能"
+    name: "FwdActE"
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "00020000"
-    name: "反向有功总电能"
+    name: "RevActE"
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "02010100"
-    name: "A相电压"
+    name: "curU"
     length: 2
     decimal: 1
     unit: "V"
   - di: "02020100"
-    name: "A相电流"
+    name: "curI"
     length: 3
     decimal: 3
     unit: "A"
+  - di: "02030100"
+    name: "TempWatt"
+    length: 3
+    decimal: 4
+    unit: "kW"
+  - di: "02050100"
+    name: "showTempWatt"
+    length: 3
+    decimal: 4
+    unit: "kVA"
+  - di: "02060100"
+    name: "factor"
+    length: 2
+    decimal: 3
+    unit: ""
 
-poll_interval_seconds: 60
+poll_interval_seconds: 120

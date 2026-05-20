@@ -24,7 +24,7 @@ std::optional<AppConfig> Config::load(const std::string& filepath) {
                 auto addr_str = m["address"].as<std::string>("");
                 auto addr = Address::from_string(addr_str);
                 if (!addr) {
-                    spdlog::error("无效的电表地址: {}", addr_str);
+                    SPDLOG_ERROR("无效的电表地址: {}", addr_str);
                     return std::nullopt;
                 }
                 mc.address = *addr;
@@ -51,7 +51,7 @@ std::optional<AppConfig> Config::load(const std::string& filepath) {
 
         return config;
     } catch (const std::exception& e) {
-        spdlog::error("加载配置文件失败: {}", e.what());
+        SPDLOG_ERROR("加载配置文件失败: {}", e.what());
         return std::nullopt;
     }
 }

@@ -1,6 +1,6 @@
 # DL/T 645-2007 电能表数据采集 — 项目文档
 
-本文档从需求、架构、数据模型、技术选型、开发计划与使用方式等维度描述本项目。模块级接口与协议细节见 [design.md](design.md)，构建与部署见 [build.md](build.md)。
+本文档从需求、架构、数据模型、技术选型、开发计划与使用方式等维度描述本项目。模块级接口与协议细节见 [design.md](design.md)，构建与部署见 [build.md](build.md)，技术难点与创新点见 [technical-highlights.md](technical-highlights.md)。
 
 ---
 
@@ -38,6 +38,8 @@
 - **可配置**：电表列表、采集项、串口参数、轮询周期均无需改代码即可调整。
 - **可部署**：宿主机交叉编译，网关单二进制 + 配置文件即可运行。
 - **可验证**：GoogleTest 覆盖协议层至应用层，回归成本低。
+
+技术难点拆解与「创新点 / 工程亮点」的客观说明见 [technical-highlights.md](technical-highlights.md)。
 
 ### 1.5 范围外（当前版本不做）
 
@@ -130,7 +132,8 @@ em645/
 ├── document/               # 项目文档（本目录）
 │   ├── project.md          # 本文档
 │   ├── design.md           # 模块与协议详细设计
-│   └── build.md            # 构建与部署
+│   ├── build.md            # 构建与部署
+│   └── technical-highlights.md  # 技术难点与创新点
 ├── scripts/
 │   └── build-cross.sh      # 一键交叉编译
 ├── src/
@@ -409,3 +412,4 @@ cd /opt/dlt645 && ./dlt645_collector collector.yaml
 | [project.md](project.md) | 本文档：需求、架构、计划、使用指南 |
 | [design.md](design.md) | 协议要点、模块接口、配置示例 |
 | [build.md](build.md) | 本地测试与 OpenWrt 交叉编译部署 |
+| [technical-highlights.md](technical-highlights.md) | 技术难点、创新点界定与工程亮点 |
