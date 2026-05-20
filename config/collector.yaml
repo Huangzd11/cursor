@@ -3,7 +3,7 @@ serial:
   baudrate: 2400
 
 meters:
-  - address: "000000000001"
+  - address: "000000000005"
     name: "1号电表"
   - address: "000000000002"
     name: "2号电表"

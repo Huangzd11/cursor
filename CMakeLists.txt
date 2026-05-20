@@ -8,13 +8,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # 第三方依赖通过 FetchContent 管理
 include(FetchContent)
 
-# GoogleTest
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
-)
-FetchContent_MakeAvailable(googletest)
+# 交叉编译时仅构建主程序，单元测试在宿主机本地运行
+if(NOT CMAKE_CROSSCOMPILING)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.14.0
+    )
+    FetchContent_MakeAvailable(googletest)
+endif()
 
 # spdlog
 FetchContent_Declare(
@@ -57,6 +59,8 @@ target_link_libraries(dlt645_lib PUBLIC spdlog::spdlog yaml-cpp::yaml-cpp)
 add_executable(dlt645_collector src/main.cpp)
 target_link_libraries(dlt645_collector PRIVATE dlt645_lib)
 
-# 测试
-enable_testing()
-add_subdirectory(tests)
+# 测试（仅宿主机本地构建）
+if(NOT CMAKE_CROSSCOMPILING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

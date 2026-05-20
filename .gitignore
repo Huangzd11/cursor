@@ -1,6 +1,10 @@
 # 构建目录
 build/
+build-cross/
 cmake-build-*/
+
+# 解压后的交叉编译工具链（由 openwrt-gcc-8.3.0.tar.gz 解压）
+openwrt-gcc-8.3.0/
 
 # IDE
 .vscode/
