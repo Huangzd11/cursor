@@ -19,62 +19,62 @@ meters:
 
 data_items:
   - di: "00010000"
-    name: "ActiveTotalE"
+    name: "ActiveTotalE"  # 正向有功总电能
     enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "00020000"
-    name: "ReverseTotalE"
+    name: "ReverseTotalE"  # 反向有功总电能
     enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "02010100"
-    name: "curU"
+    name: "curU"  # 电流
     enabled: true
     length: 2
     decimal: 1
     unit: "V"
   - di: "02020100"
-    name: "curI"
+    name: "curI"  # 电流
     enabled: true
     length: 3
     decimal: 3
     unit: "A"
   - di: "02030100"
-    name: "TempWatt"
+    name: "TempWatt"  # 瞬时总有功功率
     enabled: true
     length: 3
     decimal: 4
     unit: "kW"
   - di: "02050100"
-    name: "showTempWatt"
+    name: "showTempWatt"  # 瞬时总有功功率
     enabled: true
     length: 3
     decimal: 4
     unit: "kVA"
   - di: "02060100"
-    name: "factor"
+    name: "factor"  # 功率因数
     enabled: true
     length: 2
     decimal: 3
-    unit: ""
+    unit: ""  # 无单位
 
 poll_interval_seconds: 120
 
 # MQTT 上报（详见 document/mqtt-reporting-plan.md）
 mqtt:
-  enabled: false
-  gateway_id: "gw-openwrt-01"
-  broker: "127.0.0.1"
-  port: 1883
-  tls: false
+  enabled: true
+  gateway_id: "gw-openwrt-01"  # 网关ID
+  broker: "127.0.0.1"  # 代理地址
+  port: 1883  # 代理端口
+  tls: false  # 是否使用TLS
   # ca_file: "/etc/ssl/certs/ca.crt"
-  # username: ""
-  # password: ""
-  # client_id: "dlt645-gw-01"
-  topic_prefix: "dlt645"
-  qos: 1
-  keepalive_sec: 60
-  max_queue: 512
+  # username: ""  # 用户名
+  # password: ""  # 密码
+  # client_id: "dlt645-gw-01"  # 客户端ID
+  topic_prefix: "dlt645"  # 主题前缀
+  qos: 1  # 质量保证
+  keepalive_sec: 60  # 心跳时间
+  max_queue: 512  # 最大队列长度

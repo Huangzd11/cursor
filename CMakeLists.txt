@@ -71,6 +71,7 @@ add_library(dlt645_lib STATIC
     src/app/meter_reader.cpp
     src/app/result_reporter.cpp
     src/app/scheduler.cpp
+    src/app/mqtt_query_payload.cpp
 )
 target_include_directories(dlt645_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(dlt645_lib PUBLIC spdlog::spdlog yaml-cpp::yaml-cpp)

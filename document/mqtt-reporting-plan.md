@@ -128,6 +128,76 @@ mqtt:
 
 **与采集配置的关系**：`gateway_id`、`meter` 名称等仅用于上报标识，不改变 DL/T 645 通信参数。
 
+### 6.1 MQTT 调试（Mosquitto）
+
+本项目实现了一个简单的 **查询指令订阅**：网关订阅 `dlt645/{gateway_id}/cmd/query`，收到 **内联 JSON**、**本机 `.json` 文件路径**（读取文件后再解析）后，从内存缓存中取最近一次该表该 DI 的上报码，并回发。
+
+#### 6.1.1 Topic（按默认/示例配置）
+
+- **下发查询指令**：`{topic_prefix}/{gateway_id}/cmd/query`
+- **命中缓存回包**：`{topic_prefix}/{gateway_id}/meter/{meter}/item/{di}`
+- **未命中缓存回包**：`{topic_prefix}/{gateway_id}/cmd/query/resp`（payload `message: "no_cache"`）
+
+例如你的配置：
+
+- `topic_prefix: "dlt645"`
+- `gateway_id: "gw-openwrt-01"`
+
+则下发 topic 为：`dlt645/gw-openwrt-01/cmd/query`
+
+#### 6.1.2 查询指令 JSON（payload）
+
+保存为 `mqtt_query.json`：
+
+```json
+{"meter":"meter-1","di":"00010000"}
+```
+
+字段说明：
+
+- `meter`：电表配置名（`meters[].name`），例如 `meter-1`
+- `di`：数据标识（8 位十六进制字符串），例如 `00010000`
+
+另外也支持 **payload 为网关本机 JSON 文件路径**（整段 payload 或首行），路径需以 `.json` 结尾（大小写不敏感），程序会读取文件内容再解析 `meter`/`di` 并做同样的缓存查询响应。出于安全考虑，路径中 **不得包含 `..`**；单文件读取上限 **64KB**。格式化 JSON（`"meter" : "meter-1"` 这类带空格）同样支持。
+
+> 与 `mosquitto_pub -f mqtt_query.json` 的区别：`-f` 会把 **文件内容** 作为 MQTT payload（通常以 `{` 开头）；而 `-m '/path/to/mqtt_query.json'` 时 payload 是 **路径字符串**，由网关在本地打开该文件。
+
+#### 6.1.3 使用 `mosquitto_pub` 下发查询指令
+
+注意：`-t` 是 **topic**，JSON 必须作为 **payload**（`-m` 或 `-f`），不要把 JSON 放到 `-t`。
+
+直接发送（`-m`）：
+
+```bash
+mosquitto_pub -h 127.0.0.1 -p 1883 \
+  -t "dlt645/gw-openwrt-01/cmd/query" \
+  -m '{"meter":"meter-1","di":"00010000"}'
+```
+
+从文件发送（`-f`）：
+
+```bash
+mosquitto_pub -h 127.0.0.1 -p 1883 \
+  -t "dlt645/gw-openwrt-01/cmd/query" \
+  -f mqtt_query.json
+```
+
+由网关在本地 **按路径读取** JSON 文件（payload 为路径字符串，与 `-f` 不同）：
+
+```bash
+mosquitto_pub -h 127.0.0.1 -p 1883 \
+  -t "dlt645/gw-openwrt-01/cmd/query" \
+  -m '/etc/mqtt_query.json'
+```
+
+#### 6.1.4 使用 `mosquitto_sub` 观察回包
+
+订阅该网关下所有 topic：
+
+```bash
+mosquitto_sub -h 127.0.0.1 -p 1883 -v -t "dlt645/gw-openwrt-01/#"
+```
+
 ---
 
 ## 7. 可靠性与性能

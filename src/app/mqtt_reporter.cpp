@@ -1,5 +1,7 @@
 #include "app/mqtt_reporter.h"
 
+#include "app/mqtt_query_payload.h"
+
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -115,21 +117,6 @@ TimestampPair now_timestamp_pair() {
     char out[40]{};
     std::snprintf(out, sizeof(out), "%s.%03dZ", base, milli);
     return {ts_ms, out};
-}
-
-std::optional<std::string> json_get_string(const std::string& payload, const char* key) {
-    // 极简 JSON 提取：仅支持 {"key":"value"} 形式，不做通用解析（够用且避免引入新依赖）
-    const std::string pat = std::string("\"") + key + "\":\"";
-    const auto pos = payload.find(pat);
-    if (pos == std::string::npos) {
-        return std::nullopt;
-    }
-    const auto start = pos + pat.size();
-    const auto end = payload.find('\"', start);
-    if (end == std::string::npos || end < start) {
-        return std::nullopt;
-    }
-    return payload.substr(start, end - start);
 }
 
 }  // namespace
@@ -388,11 +375,16 @@ bool MqttReporter::publish_now(const std::string& topic, const std::string& payl
 }
 
 void MqttReporter::handle_query_command(const std::string& payload) {
-    // 指令格式：{"meter":"meter-1","di":"00010000"}
-    const auto meter = json_get_string(payload, "meter");
-    const auto di = json_get_string(payload, "di");
+    // 指令格式：{"meter":"meter-1","di":"00010000"}；或为网关本地 .json 文件路径（读取后解析）
+    const auto resolved = resolve_mqtt_query_json_payload(payload);
+    if (!resolved) {
+        SPDLOG_WARN("MQTT 查询指令无法解析（需为 JSON 对象或以 .json 结尾的本地路径）: {}", payload);
+        return;
+    }
+    const auto meter = mqtt_query_json_get_string(*resolved, "meter");
+    const auto di = mqtt_query_json_get_string(*resolved, "di");
     if (!meter || !di) {
-        SPDLOG_WARN("MQTT 查询指令格式错误: {}", payload);
+        SPDLOG_WARN("MQTT 查询指令格式错误（缺少 meter/di）: {}", *resolved);
         return;
     }
 

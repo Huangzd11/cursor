@@ -11,6 +11,7 @@ add_executable(dlt645_tests
     test_config.cpp
     test_result_reporter.cpp
     test_scheduler.cpp
+    test_mqtt_query_payload.cpp
 )
 
 target_link_libraries(dlt645_tests PRIVATE
