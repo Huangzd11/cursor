@@ -76,7 +76,11 @@ int main(int argc, char* argv[]) {
                            dlt645::MeterReader::ErrorCode code,
                            std::optional<dlt645::MeterReader::ReadResult> result) {
             reporter.report(meter_name, item_name, code, result);
-            mqtt.report(meter_name, meter_address_hex, item_name, di_hex, code, result);
+        });
+    scheduler.set_meter_batch_callback(
+        [&mqtt](const std::string& meter_name, const std::string& meter_address_hex,
+                const std::vector<dlt645::Scheduler::BatchItemResult>& items) {
+            mqtt.report_batch(meter_name, meter_address_hex, items);
         });
 
     std::signal(SIGINT, signal_handler);

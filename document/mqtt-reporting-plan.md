@@ -61,7 +61,8 @@
   "success": true,
   "value": 12345.67,
   "unit": "kWh",
-  "ts_ms": 1716189048123
+  "ts_ms": 1716189048123,
+  "timestamp": "2024-05-20T12:30:48.123Z"
 }
 ```
 
@@ -78,9 +79,15 @@
   "success": false,
   "error_code": 2,
   "error_name": "接收超时",
-  "ts_ms": 1716189048123
+  "ts_ms": 1716189048123,
+  "timestamp": "2024-05-20T12:30:48.123Z"
 }
 ```
+
+- `ts_ms`：Unix 毫秒时间戳（整型）。
+- `timestamp`：与 `ts_ms` 同一时刻的 **UTC** ISO8601 字符串，格式 `YYYY-MM-DDTHH:MM:SS.mmmZ`（毫秒三位）。
+
+**按表聚合上报**（`.../meter/{meter}/readings`）：根对象同样包含 `ts_ms` 与 `timestamp`（整包生成时刻）；`items[]` 内各条仍可通过单点 topic 缓存查询到带时间戳的单条 JSON。
 
 字段与现有 `MeterReader::ErrorCode`、`ResultReporter` 中错误名映射表保持一致，便于运维对照。
 

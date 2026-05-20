@@ -48,6 +48,7 @@ void Scheduler::poll_once() {
             continue;
         }
 
+        std::vector<BatchItemResult> batch_items;
         for (const auto& item : config_.data_items) {
             if (!running_) {
                 return;
@@ -66,12 +67,27 @@ void Scheduler::poll_once() {
             if (callback_) {
                 callback_(meter.name, meter.address.to_string(), item.name, di_hex, code, result);
             }
+
+            batch_items.push_back(BatchItemResult{
+                item.name,
+                di_hex,
+                code,
+                result,
+            });
+        }
+
+        if (meter_batch_callback_ && !batch_items.empty()) {
+            meter_batch_callback_(meter.name, meter.address.to_string(), batch_items);
         }
     }
 }
 
 void Scheduler::set_result_callback(ResultCallback callback) {
     callback_ = std::move(callback);
+}
+
+void Scheduler::set_meter_batch_callback(MeterBatchCallback callback) {
+    meter_batch_callback_ = std::move(callback);
 }
 
 }  // namespace dlt645

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <sstream>
 
 #include <spdlog/spdlog.h>
@@ -12,6 +13,10 @@ extern "C" {
 
 namespace dlt645 {
 namespace {
+
+std::string make_cache_key(const std::string& meter_name, const std::string& di_hex) {
+    return meter_name + "|" + di_hex;
+}
 
 std::string topic_segment(const std::string& s) {
     std::string o;
@@ -89,10 +94,42 @@ std::string json_escape(const std::string& s) {
     return o;
 }
 
-int64_t now_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
-        .count();
+struct TimestampPair {
+    int64_t ts_ms;
+    std::string iso_utc;
+};
+
+// 上送 JSON 使用：ts_ms（整型）+ timestamp（ISO8601 UTC，毫秒，Z 结尾）
+TimestampPair now_timestamp_pair() {
+    using namespace std::chrono;
+    const auto now = system_clock::now();
+    const auto ms = duration_cast<milliseconds>(now.time_since_epoch());
+    const int64_t ts_ms = ms.count();
+    const time_t sec = static_cast<time_t>(ts_ms / 1000);
+    const int milli = static_cast<int>(ts_ms % 1000);
+
+    struct tm tm_buf {};
+    gmtime_r(&sec, &tm_buf);
+    char base[32]{};
+    std::strftime(base, sizeof(base), "%Y-%m-%dT%H:%M:%S", &tm_buf);
+    char out[40]{};
+    std::snprintf(out, sizeof(out), "%s.%03dZ", base, milli);
+    return {ts_ms, out};
+}
+
+std::optional<std::string> json_get_string(const std::string& payload, const char* key) {
+    // 极简 JSON 提取：仅支持 {"key":"value"} 形式，不做通用解析（够用且避免引入新依赖）
+    const std::string pat = std::string("\"") + key + "\":\"";
+    const auto pos = payload.find(pat);
+    if (pos == std::string::npos) {
+        return std::nullopt;
+    }
+    const auto start = pos + pat.size();
+    const auto end = payload.find('\"', start);
+    if (end == std::string::npos || end < start) {
+        return std::nullopt;
+    }
+    return payload.substr(start, end - start);
 }
 
 }  // namespace
@@ -129,6 +166,19 @@ std::string MqttReporter::build_topic(const std::string& meter_name,
     return oss.str();
 }
 
+std::string MqttReporter::build_batch_topic(const std::string& meter_name) const {
+    std::ostringstream oss;
+    oss << topic_segment(cfg_.topic_prefix) << '/' << topic_segment(cfg_.gateway_id) << "/meter/"
+        << topic_segment(meter_name) << "/readings";
+    return oss.str();
+}
+
+std::string MqttReporter::build_cmd_topic() const {
+    std::ostringstream oss;
+    oss << topic_segment(cfg_.topic_prefix) << '/' << topic_segment(cfg_.gateway_id) << "/cmd/query";
+    return oss.str();
+}
+
 std::string MqttReporter::build_payload(const MqttConfig& cfg,
                                         const std::string& meter_name,
                                         const std::string& meter_address_hex,
@@ -136,6 +186,7 @@ std::string MqttReporter::build_payload(const MqttConfig& cfg,
                                         const std::string& di_hex,
                                         MeterReader::ErrorCode code,
                                         const std::optional<MeterReader::ReadResult>& result) {
+    const TimestampPair ts = now_timestamp_pair();
     std::ostringstream oss;
     oss << std::fixed;
     oss << "{\"schema_version\":1,\"gateway_id\":\"" << json_escape(cfg.gateway_id) << "\","
@@ -150,7 +201,42 @@ std::string MqttReporter::build_payload(const MqttConfig& cfg,
         oss << "\"success\":false,\"error_code\":" << static_cast<int>(code) << ",\"error_name\":\""
             << json_escape(error_code_name(code)) << "\",";
     }
-    oss << "\"ts_ms\":" << now_ms() << '}';
+    oss << "\"ts_ms\":" << ts.ts_ms << ",\"timestamp\":\"" << json_escape(ts.iso_utc) << "\"}";
+    return oss.str();
+}
+
+std::string MqttReporter::build_batch_payload(
+    const MqttConfig& cfg,
+    const std::string& meter_name,
+    const std::string& meter_address_hex,
+    const std::vector<Scheduler::BatchItemResult>& items) {
+
+    const TimestampPair ts = now_timestamp_pair();
+    std::ostringstream oss;
+    oss << std::fixed;
+    oss << "{\"schema_version\":1,\"gateway_id\":\"" << json_escape(cfg.gateway_id) << "\","
+        << "\"meter\":\"" << json_escape(meter_name) << "\","
+        << "\"meter_address\":\"" << json_escape(meter_address_hex) << "\","
+        << "\"ts_ms\":" << ts.ts_ms << ",\"timestamp\":\"" << json_escape(ts.iso_utc) << "\",\"items\":[";
+
+    bool first = true;
+    for (const auto& it : items) {
+        if (!first) {
+            oss << ',';
+        }
+        first = false;
+
+        oss << "{\"item\":\"" << json_escape(it.item_name) << "\","
+            << "\"di\":\"" << json_escape(it.di_hex) << "\",";
+        if (it.code == MeterReader::ErrorCode::kSuccess && it.result) {
+            oss << "\"success\":true,\"value\":" << it.result->value << ",\"unit\":\""
+                << json_escape(it.result->unit) << "\"}";
+        } else {
+            oss << "\"success\":false,\"error_code\":" << static_cast<int>(it.code)
+                << ",\"error_name\":\"" << json_escape(error_code_name(it.code)) << "\"}";
+        }
+    }
+    oss << "]}";
     return oss.str();
 }
 
@@ -170,6 +256,46 @@ void MqttReporter::report(const std::string& meter_name,
 
     {
         std::lock_guard<std::mutex> lk(mutex_);
+        last_item_payload_by_key_[make_cache_key(meter_name, di_hex)] = job.payload;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (queue_.size() >= cfg_.max_queue) {
+            static std::atomic<int> drop_log_counter{0};
+            if (++drop_log_counter % 100 == 1) {
+                SPDLOG_WARN("MQTT 队列已满 (max_queue={})，丢弃上报", cfg_.max_queue);
+            }
+            return;
+        }
+        queue_.push(std::move(job));
+    }
+    cv_.notify_one();
+}
+
+void MqttReporter::report_batch(const std::string& meter_name,
+                                const std::string& meter_address_hex,
+                                const std::vector<Scheduler::BatchItemResult>& items) {
+    if (!cfg_.enabled) {
+        return;
+    }
+    if (items.empty()) {
+        return;
+    }
+
+    QueuedMessage job;
+    job.topic = build_batch_topic(meter_name);
+    job.payload = build_batch_payload(cfg_, meter_name, meter_address_hex, items);
+
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        // 同时刷新缓存，便于 cmd/query 立即返回
+        for (const auto& it : items) {
+            const std::string key = make_cache_key(meter_name, it.di_hex);
+            last_item_payload_by_key_[key] = build_payload(
+                cfg_, meter_name, meter_address_hex, it.item_name, it.di_hex, it.code, it.result);
+        }
+
         if (queue_.size() >= cfg_.max_queue) {
             static std::atomic<int> drop_log_counter{0};
             if (++drop_log_counter % 100 == 1) {
@@ -219,6 +345,15 @@ bool MqttReporter::ensure_connected() {
         return false;
     }
     SPDLOG_INFO("MQTT 已连接: {}", uri);
+
+    // 连接成功后订阅查询指令
+    const std::string cmd_topic = build_cmd_topic();
+    const int src = MQTTClient_subscribe(c, cmd_topic.c_str(), 0);
+    if (src != MQTTCLIENT_SUCCESS) {
+        SPDLOG_WARN("MQTT 订阅失败 rc={} topic={}", src, cmd_topic);
+    } else {
+        SPDLOG_INFO("MQTT 已订阅查询指令: {}", cmd_topic);
+    }
     return true;
 }
 
@@ -234,35 +369,116 @@ void MqttReporter::disconnect_client() {
     client_ = nullptr;
 }
 
+bool MqttReporter::publish_now(const std::string& topic, const std::string& payload) {
+    if (!ensure_connected()) {
+        return false;
+    }
+    MQTTClient c = static_cast<MQTTClient>(client_);
+    const int rc = MQTTClient_publish(
+        c, topic.c_str(), static_cast<int>(payload.size()),
+        reinterpret_cast<void*>(const_cast<char*>(payload.data())), cfg_.qos, 0, nullptr);
+    if (rc != MQTTCLIENT_SUCCESS) {
+        SPDLOG_WARN("MQTT 发布失败 rc={} topic={}", rc, topic);
+        disconnect_client();
+        return false;
+    }
+    SPDLOG_INFO("MQTT 上送 | topic={} | qos={} | bytes={} | payload={}",
+                topic, cfg_.qos, payload.size(), payload);
+    return true;
+}
+
+void MqttReporter::handle_query_command(const std::string& payload) {
+    // 指令格式：{"meter":"meter-1","di":"00010000"}
+    const auto meter = json_get_string(payload, "meter");
+    const auto di = json_get_string(payload, "di");
+    if (!meter || !di) {
+        SPDLOG_WARN("MQTT 查询指令格式错误: {}", payload);
+        return;
+    }
+
+    std::string cached;
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        const auto it = last_item_payload_by_key_.find(make_cache_key(*meter, *di));
+        if (it != last_item_payload_by_key_.end()) {
+            cached = it->second;
+        }
+    }
+    if (cached.empty()) {
+        const std::string resp_topic =
+            topic_segment(cfg_.topic_prefix) + "/" + topic_segment(cfg_.gateway_id) + "/cmd/query/resp";
+        const TimestampPair ts = now_timestamp_pair();
+        std::ostringstream oss;
+        oss << "{\"schema_version\":1,\"gateway_id\":\"" << json_escape(cfg_.gateway_id) << "\","
+            << "\"success\":false,\"message\":\"no_cache\",\"meter\":\"" << json_escape(*meter) << "\","
+            << "\"di\":\"" << json_escape(*di) << "\",\"ts_ms\":" << ts.ts_ms
+            << ",\"timestamp\":\"" << json_escape(ts.iso_utc) << "\"}";
+        publish_now(resp_topic, oss.str());
+        return;
+    }
+
+    // 按要求“查询哪个就上报哪个”：发布到该 item 的标准 topic
+    publish_now(build_topic(*meter, *di), cached);
+}
+
+void MqttReporter::handle_incoming_commands(int timeout_ms) {
+    MQTTClient c = static_cast<MQTTClient>(client_);
+    if (!c || !MQTTClient_isConnected(c)) {
+        return;
+    }
+
+    char* topic_name = nullptr;
+    int topic_len = 0;
+    MQTTClient_message* msg = nullptr;
+    const int rc = MQTTClient_receive(c, &topic_name, &topic_len, &msg, timeout_ms);
+    if (rc != MQTTCLIENT_SUCCESS || msg == nullptr) {
+        return;
+    }
+
+    std::string topic;
+    if (topic_name) {
+        topic = topic_name;
+    }
+
+    std::string payload;
+    payload.assign(static_cast<const char*>(msg->payload),
+                   static_cast<size_t>(msg->payloadlen));
+
+    if (topic == build_cmd_topic()) {
+        SPDLOG_INFO("MQTT 收到查询指令 | topic={} | payload={}", topic, payload);
+        handle_query_command(payload);
+    }
+
+    MQTTClient_freeMessage(&msg);
+    MQTTClient_free(topic_name);
+}
+
 void MqttReporter::worker_loop() {
     while (true) {
         std::unique_lock<std::mutex> lk(mutex_);
-        cv_.wait(lk, [&] { return !running_.load() || !queue_.empty(); });
+        cv_.wait_for(lk, std::chrono::milliseconds(200), [&] { return !running_.load() || !queue_.empty(); });
         if (!running_ && queue_.empty()) {
             break;
         }
-        if (queue_.empty()) {
-            continue;
+        // 出队一个（若有），否则释放锁去处理订阅消息
+        std::optional<QueuedMessage> job;
+        if (!queue_.empty()) {
+            job = std::move(queue_.front());
+            queue_.pop();
         }
-        QueuedMessage job = std::move(queue_.front());
-        queue_.pop();
         lk.unlock();
 
         if (!ensure_connected()) {
             continue;
         }
 
-        MQTTClient c = static_cast<MQTTClient>(client_);
-        const int rc = MQTTClient_publish(
-            c, job.topic.c_str(), static_cast<int>(job.payload.size()),
-            reinterpret_cast<void*>(job.payload.data()), cfg_.qos, 0, nullptr);
-        if (rc != MQTTCLIENT_SUCCESS) {
-            SPDLOG_WARN("MQTT 发布失败 rc={} topic={}", rc, job.topic);
-            disconnect_client();
+        // 先处理订阅指令，再发布待上送消息
+        handle_incoming_commands(0);
+        if (job) {
+            publish_now(job->topic, job->payload);
         } else {
-            // 与控制台/文件日志一致，便于对照 Broker 订阅内容
-            SPDLOG_INFO("MQTT 上送 | topic={} | qos={} | bytes={} | payload={}",
-                        job.topic, cfg_.qos, job.payload.size(), job.payload);
+            // 无待发送消息时，阻塞等待一点时间处理指令
+            handle_incoming_commands(200);
         }
     }
     disconnect_client();

@@ -23,6 +23,18 @@ public:
         MeterReader::ErrorCode code,
         std::optional<MeterReader::ReadResult> result)>;
 
+    // 一块表采集完所有启用数据项后的聚合回调（用于按表上报、缓存等）
+    struct BatchItemResult {
+        std::string item_name;
+        std::string di_hex;
+        MeterReader::ErrorCode code;
+        std::optional<MeterReader::ReadResult> result;
+    };
+    using MeterBatchCallback = std::function<void(
+        const std::string& meter_name,
+        const std::string& meter_address_hex,
+        const std::vector<BatchItemResult>& items)>;
+
     // readers[i] 对应 meters[i]；禁用的表对应 nullptr
     Scheduler(AppConfig config, std::vector<std::shared_ptr<MeterReader>> readers);
 
@@ -36,12 +48,14 @@ public:
     void poll_once();
 
     void set_result_callback(ResultCallback callback);
+    void set_meter_batch_callback(MeterBatchCallback callback);
 
 private:
     AppConfig config_;
     std::vector<std::shared_ptr<MeterReader>> readers_;
     std::atomic<bool> running_{false};
     ResultCallback callback_;
+    MeterBatchCallback meter_batch_callback_;
 };
 
 }  // namespace dlt645
