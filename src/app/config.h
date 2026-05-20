@@ -10,15 +10,17 @@
 
 namespace dlt645 {
 
-// 单个电表的配置
+// 单个电表的配置（每块表可接独立串口）
 struct MeterConfig {
     Address address;
     std::string name;
+    SerialPort::Config serial;  // 该表使用的串口；可与根节点 serial 合并解析
+    bool enabled = true;        // false 时整表不采集
 };
 
 // 整体应用配置
 struct AppConfig {
-    SerialPort::Config serial;
+    SerialPort::Config default_serial;  // 根节点 serial，作为各表 serial 的默认值（可省略）
     std::vector<MeterConfig> meters;
     std::vector<DataItem> data_items;
     int poll_interval_seconds = 60;

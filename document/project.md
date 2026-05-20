@@ -187,9 +187,9 @@ em645/
 
 ```yaml
 # 逻辑结构（见 config/collector.yaml）
-serial: { device, baudrate, databits?, stopbits?, parity? }
-meters: [ { address, name }, ... ]
-data_items: [ { di, name, length, decimal, unit }, ... ]
+serial?: { device, baudrate, databits?, stopbits?, parity? }   # 可选，各表 serial 默认值
+meters: [ { address, name, enabled, serial }, ... ]
+data_items: [ { di, name, enabled, length, decimal, unit }, ... ]
 poll_interval_seconds: <int>
 ```
 
@@ -332,32 +332,39 @@ ctest --test-dir build --output-on-failure
 
 完整示例：`config/collector.yaml`。
 
-#### serial（串口）
+#### serial（根级串口，可选）
+
+若各 `meters[].serial` 未单独写 `device` 等字段，则继承此处作为默认值。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| device | string | 是 | — | 设备路径，如 `/dev/ttyUSB0`、`/dev/ttyS1` |
-| baudrate | int | 是 | — | 波特率，常见 2400、9600 |
+| device | string | 否 | 空 | 设备路径，如 `/dev/ttyUSB0` |
+| baudrate | int | 否 | 2400 | 波特率 |
 | databits | int | 否 | 8 | 数据位 |
 | stopbits | int | 否 | 1 | 停止位 |
-| parity | string | 否 | `E` | `N` 无 / `E` 偶 / `O` 奇校验 |
+| parity | string | 否 | `E` | `N` / `E` / `O` |
 
 #### meters（电表列表）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| address | string | 是 | 12 位十六进制通信地址，如 `"000000000001"` |
+| address | string | 是 | 12 位十六进制通信地址 |
 | name | string | 是 | 显示名称，用于日志 |
+| enabled | bool | 否 | `true`：参与轮询；`false`：整表跳过（可不打开串口） |
+| serial | object | 条件 | **启用**的电表必填有效 `device`（或依赖根 `serial` 提供 `device`） |
+
+**serial（表级）**：字段同根级 `serial`，未写的项继承根级默认值。
 
 #### data_items（采集项）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| di | string | 是 | 8 位十六进制数据标识，如 `"00010000"` |
+| di | string | 是 | 8 位十六进制数据标识 |
 | name | string | 是 | 数据项名称 |
+| enabled | bool | 否 | `true`：采集；`false`：所有表均跳过该项 |
 | length | int | 是 | 数据域字节长度（不含 DI） |
 | decimal | int | 是 | 小数位数 |
-| unit | string | 是 | 单位，如 `kWh`、`V`、`A` |
+| unit | string | 是 | 单位，如 `kWh`、`V`；无量纲可为空字符串 |
 
 #### poll_interval_seconds
 
@@ -367,7 +374,8 @@ ctest --test-dir build --output-on-failure
 
 `Config::validate()` 在启动时检查，失败则打印错误并退出，常见规则包括：
 
-- 至少一块电表、至少一个数据项；
+- 至少一块 `enabled: true` 的电表、至少一项 `enabled: true` 的 `data_items`；
+- 对**启用**的电表，必须能解析出非空的串口 `device`（表级 `serial` 或根级 `serial` 合并后）；
 - 电表地址为 12 位十六进制；
 - DI 为 8 位十六进制；
 - 波特率在支持范围内。

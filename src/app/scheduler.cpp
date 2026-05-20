@@ -7,9 +7,8 @@
 
 namespace dlt645 {
 
-Scheduler::Scheduler(std::shared_ptr<MeterReader> reader,
-                     const AppConfig& config)
-    : reader_(std::move(reader)), config_(config) {}
+Scheduler::Scheduler(AppConfig config, std::vector<std::shared_ptr<MeterReader>> readers)
+    : config_(std::move(config)), readers_(std::move(readers)) {}
 
 void Scheduler::run() {
     running_ = true;
@@ -18,7 +17,6 @@ void Scheduler::run() {
     while (running_) {
         poll_once();
 
-        // 等待轮询间隔，期间检查停止标志
         for (int i = 0; i < config_.poll_interval_seconds && running_; ++i) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
@@ -32,10 +30,31 @@ void Scheduler::stop() {
 }
 
 void Scheduler::poll_once() {
-    for (const auto& meter : config_.meters) {
+    for (size_t i = 0; i < config_.meters.size(); ++i) {
+        if (!running_) {
+            return;
+        }
+        const auto& meter = config_.meters[i];
+        if (!meter.enabled) {
+            continue;
+        }
+        if (i >= readers_.size()) {
+            continue;
+        }
+        const auto& reader = readers_[i];
+        if (!reader) {
+            continue;
+        }
+
         for (const auto& item : config_.data_items) {
-            auto [code, result] =
-                reader_->read_data(meter.name, meter.address, item);
+            if (!running_) {
+                return;
+            }
+            if (!item.enabled) {
+                continue;
+            }
+
+            auto [code, result] = reader->read_data(meter.name, meter.address, item);
 
             if (callback_) {
                 callback_(meter.name, item.name, code, result);

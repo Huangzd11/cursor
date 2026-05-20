@@ -204,6 +204,7 @@ struct DataItem {
     int data_length;       // 数据字段长度（字节数，不含DI本身）
     int decimal_digits;    // 小数位数
     std::string unit;      // 单位（如 "kWh"）
+    bool enabled = true;   // 是否采集该项
 
     // 将DI编码为4字节序列（低位在前，用于组装请求帧数据域）
     std::vector<uint8_t> encode_di() const;
@@ -342,15 +343,17 @@ YAML 配置文件的解析和校验，将配置文件转为类型安全的结构
 
 ```cpp
 struct AppConfig {
-    SerialPort::Config serial;            // 串口配置
-    std::vector<MeterConfig> meters;      // 电表列表
-    std::vector<DataItem> data_items;     // 采集数据项列表
-    int poll_interval_seconds;            // 轮询间隔（秒）
+    SerialPort::Config default_serial;  // 根节点 serial，作为各表 serial 默认值
+    std::vector<MeterConfig> meters;    // 电表列表
+    std::vector<DataItem> data_items;   // 采集数据项列表
+    int poll_interval_seconds;          // 轮询间隔（秒）
 };
 
 struct MeterConfig {
     Address address;
     std::string name;
+    SerialPort::Config serial;  // 该表所用串口（可与根 serial 合并）
+    bool enabled = true;          // 是否采集该表
 };
 
 class Config {
@@ -365,13 +368,13 @@ public:
 
 ### 4.11 Scheduler（轮询调度器）
 
-按配置的时间间隔，循环遍历每块电表的每个数据项进行采集。
+按配置的时间间隔，循环遍历**已启用**电表与**已启用**数据项进行采集；每块电表使用各自串口对应的 `MeterReader`。
 
 ```cpp
 class Scheduler {
 public:
-    Scheduler(std::shared_ptr<MeterReader> reader,
-              const AppConfig& config);
+    Scheduler(AppConfig config,
+              std::vector<std::shared_ptr<MeterReader>> readers);
 
     // 启动轮询（阻塞，直到调用 stop()）
     void run();
@@ -379,7 +382,7 @@ public:
     // 停止轮询（可从其他线程调用）
     void stop();
 
-    // 执行一轮采集（遍历所有电表的所有数据项）
+    // 执行一轮采集（遍历启用表与启用数据项）
     void poll_once();
 
     // 设置采集结果回调
@@ -391,8 +394,8 @@ public:
     void set_result_callback(ResultCallback callback);
 
 private:
-    std::shared_ptr<MeterReader> reader_;
     AppConfig config_;
+    std::vector<std::shared_ptr<MeterReader>> readers_;
     std::atomic<bool> running_{false};
     ResultCallback callback_;
 };
@@ -416,24 +419,35 @@ public:
 ## 五、配置文件格式
 
 ```yaml
-serial:
-  device: "/dev/ttyUSB0"
-  baudrate: 2400
+# 根级 serial 可选，作为各表 meters[].serial 的默认值
+# serial:
+#   device: "/dev/ttyUSB0"
+#   baudrate: 2400
 
 meters:
   - address: "000000000001"
     name: "1号电表"
+    enabled: true
+    serial:
+      device: "/dev/ttyUSB0"
+      baudrate: 2400
   - address: "000000000002"
     name: "2号电表"
+    enabled: true
+    serial:
+      device: "/dev/ttyUSB1"
+      baudrate: 2400
 
 data_items:
   - di: "00010000"
     name: "正向有功总电能"
+    enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "02010100"
     name: "A相电压"
+    enabled: true
     length: 2
     decimal: 1
     unit: "V"

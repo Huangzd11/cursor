@@ -1,46 +1,62 @@
-serial:
-  device: "/dev/plugin/ttyRS0_2"
-  baudrate: 2400
+# 根级 serial 可选：作为各电表 meters[].serial 的默认值（表级未写 device 时继承）
+# serial:
+#   device: "/dev/plugin/ttyRS0_2"
+#   baudrate: 2400
 
 meters:
   - address: "000000000005"
     name: "meter-1"
+    enabled: true
+    serial:
+      device: "/dev/plugin/ttyRS0_2"
+      baudrate: 2400
   - address: "000000000002"
     name: "meter-2"
+    enabled: true
+    serial:
+      device: "/dev/plugin/ttyRS0_3"
+      baudrate: 2400
 
 data_items:
   - di: "00010000"
     name: "FwdActE"
+    enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "00020000"
     name: "RevActE"
+    enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "02010100"
     name: "curU"
+    enabled: true
     length: 2
     decimal: 1
     unit: "V"
   - di: "02020100"
     name: "curI"
+    enabled: true
     length: 3
     decimal: 3
     unit: "A"
   - di: "02030100"
     name: "TempWatt"
+    enabled: true
     length: 3
     decimal: 4
     unit: "kW"
   - di: "02050100"
     name: "showTempWatt"
+    enabled: true
     length: 3
     decimal: 4
     unit: "kVA"
   - di: "02060100"
     name: "factor"
+    enabled: true
     length: 2
     decimal: 3
     unit: ""

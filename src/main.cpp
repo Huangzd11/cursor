@@ -1,6 +1,7 @@
 #include <csignal>
 #include <iostream>
 #include <memory>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
@@ -29,7 +30,6 @@ int main(int argc, char* argv[]) {
         config_path = argv[1];
     }
 
-    // 加载配置
     auto config = dlt645::Config::load(config_path);
     if (!config) {
         SPDLOG_ERROR("配置加载失败，退出");
@@ -44,20 +44,28 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 构建组件链: SerialPort → FrameTransceiver → MeterReader → Scheduler
-    auto serial = std::make_shared<dlt645::SerialPort>(config->serial);
-    if (!serial->open()) {
-        SPDLOG_ERROR("串口打开失败: {}", config->serial.device);
-        return 1;
+    std::vector<std::shared_ptr<dlt645::MeterReader>> readers;
+    readers.reserve(config->meters.size());
+
+    for (const auto& meter : config->meters) {
+        if (!meter.enabled) {
+            readers.push_back(nullptr);
+            continue;
+        }
+
+        auto serial = std::make_shared<dlt645::SerialPort>(meter.serial);
+        if (!serial->open()) {
+            SPDLOG_ERROR("串口打开失败: {} (表: {})", meter.serial.device, meter.name);
+            return 1;
+        }
+
+        auto transceiver = std::make_shared<dlt645::FrameTransceiver>(serial);
+        readers.push_back(std::make_shared<dlt645::MeterReader>(transceiver));
     }
 
-    auto transceiver = std::make_shared<dlt645::FrameTransceiver>(serial);
-    auto reader = std::make_shared<dlt645::MeterReader>(transceiver);
-
-    dlt645::Scheduler scheduler(reader, *config);
+    dlt645::Scheduler scheduler(std::move(*config), std::move(readers));
     g_scheduler = &scheduler;
 
-    // 注册结果回调
     dlt645::ResultReporter reporter;
     scheduler.set_result_callback(
         [&reporter](const std::string& meter, const std::string& item,
@@ -66,7 +74,6 @@ int main(int argc, char* argv[]) {
             reporter.report(meter, item, code, result);
         });
 
-    // 注册信号处理
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 

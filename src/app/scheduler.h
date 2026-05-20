@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "app/config.h"
 #include "app/meter_reader.h"
@@ -20,8 +21,8 @@ public:
         MeterReader::ErrorCode code,
         std::optional<MeterReader::ReadResult> result)>;
 
-    Scheduler(std::shared_ptr<MeterReader> reader,
-              const AppConfig& config);
+    // readers[i] 对应 meters[i]；禁用的表对应 nullptr
+    Scheduler(AppConfig config, std::vector<std::shared_ptr<MeterReader>> readers);
 
     // 启动轮询（阻塞，直到调用 stop()）
     void run();
@@ -35,8 +36,8 @@ public:
     void set_result_callback(ResultCallback callback);
 
 private:
-    std::shared_ptr<MeterReader> reader_;
     AppConfig config_;
+    std::vector<std::shared_ptr<MeterReader>> readers_;
     std::atomic<bool> running_{false};
     ResultCallback callback_;
 };
