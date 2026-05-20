@@ -1,12 +1,8 @@
 #pragma once
 
-#include <spdlog/spdlog.h>
-
 namespace dlt645 {
 
-// 初始化全局日志格式（含源文件与行号，需配合 SPDLOG_* 宏使用）
-inline void init_logging() {
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
-}
+// 初始化全局日志：控制台 + log/dlt645_YYYY-MM-DD.log（按日切分，与控制台格式一致）
+void init_logging();
 
 }  // namespace dlt645

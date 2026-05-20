@@ -61,4 +61,6 @@ scp -P 35520 build-cross/dlt645_collector   admin@172.21.9.146:/userdata/admin/h
 ./dlt645_collector config/collector.yaml
 ```
 
+运行后会在当前工作目录下自动创建 `log/`，并按日期写入 `log/dlt645_YYYY-MM-DD.log`（与终端输出格式一致）；跨日零点由 spdlog 自动切换新文件。
+
 串口设备路径以网关实际为准（如 `/dev/ttyS1`）。

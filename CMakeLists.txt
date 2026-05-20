@@ -48,6 +48,7 @@ add_library(dlt645_lib STATIC
     src/transport/frame_transceiver.cpp
     # 应用层
     src/app/config.cpp
+    src/app/logging.cpp
     src/app/meter_reader.cpp
     src/app/result_reporter.cpp
     src/app/scheduler.cpp

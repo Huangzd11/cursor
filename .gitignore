@@ -13,6 +13,9 @@ openwrt-gcc-8.3.0/
 *.swo
 *~
 
+# 运行日志（按日生成 log/dlt645_YYYY-MM-DD.log）
+log/
+
 # 编译产物
 *.o
 *.a

@@ -39,9 +39,11 @@ MeterReader::read_data(std::string_view meter_name,
     auto request = build_request(address, item);
     const auto wire = FrameCodec::encode(request);
     SPDLOG_INFO(
-        "采集指令 | 表名={} | 电表地址={} | 数据项={} | DI=0x{:08X} | 帧={}",
-        meter_name, address.to_string(), item.name, item.di, format_hex_bytes(wire));
+        //"采集指令 | 表名={} | 电表地址={} | 数据项={} | DI=0x{:08X} | 帧={}",
+        //meter_name, address.to_string(), item.name, item.di, format_hex_bytes(wire));
 
+        "采集指令: {}", format_hex_bytes(wire));
+        
     // 发送
     if (!transceiver_->send_frame(request)) {
         return {ErrorCode::kSendFailed, std::nullopt};
