@@ -13,8 +13,11 @@
 
 ## 本地开发与测试（宿主机）
 
+首次 `cmake` 会从 GitHub **下载 Paho MQTT C 源码包**（`FetchContent`），需能访问外网。工程已启用 **C 语言**（与 Paho 子工程一致）。
+
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+# 可选 -Wno-dev：抑制 Paho 子工程 CMP0048 等开发者警告
+cmake -Wno-dev -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
@@ -41,7 +44,8 @@ tar -xzf openwrt-gcc-8.3.0.tar.gz
 
 ```bash
 export STAGING_DIR="$(pwd)/openwrt-gcc-8.3.0"
-cmake -S . -B build-cross \
+# 可选 -Wno-dev：抑制 Paho 子工程 CMP0048 等开发者警告（与 scripts/build-cross.sh 一致）
+cmake -Wno-dev -S . -B build-cross \
     -DCMAKE_TOOLCHAIN_FILE=cmake/openwrt-aarch64.cmake \
     -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cross -j$(nproc)

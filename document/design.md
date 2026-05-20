@@ -12,6 +12,7 @@
 - 通过串口与电能表通信，支持多表轮询采集
 - 采集数据项通过 YAML 配置文件灵活定义
 - 采集结果通过日志输出（终端/文件）
+- **MQTT 上报**（规划见 [mqtt-reporting-plan.md](mqtt-reporting-plan.md)，实现按阶段迭代）
 - 采用 TDD 开发方式，确保协议实现的正确性
 
 ### 1.2 适用范围
@@ -347,6 +348,16 @@ struct AppConfig {
     std::vector<MeterConfig> meters;    // 电表列表
     std::vector<DataItem> data_items;   // 采集数据项列表
     int poll_interval_seconds;          // 轮询间隔（秒）
+    MqttConfig mqtt;                    // MQTT 上报（可选开关）
+};
+
+struct MqttConfig {
+    bool enabled = false;
+    std::string gateway_id;
+    std::string broker;
+    int port = 1883;
+    bool tls = false;
+    // ... 详见 config.h / project.md
 };
 
 struct MeterConfig {
@@ -385,10 +396,12 @@ public:
     // 执行一轮采集（遍历启用表与启用数据项）
     void poll_once();
 
-    // 设置采集结果回调
+    // 设置采集结果回调（含电表地址与 DI 十六进制，便于 MQTT/外部系统上报）
     using ResultCallback = std::function<void(
         const std::string& meter_name,
+        const std::string& meter_address_hex,
         const std::string& item_name,
+        const std::string& di_hex,
         MeterReader::ErrorCode code,
         std::optional<MeterReader::ReadResult> result)>;
     void set_result_callback(ResultCallback callback);
@@ -452,6 +465,16 @@ data_items:
     decimal: 1
     unit: "V"
 
+mqtt:
+  enabled: false
+  gateway_id: "gw-001"
+  broker: "127.0.0.1"
+  port: 1883
+  tls: false
+  topic_prefix: "dlt645"
+  qos: 1
+  keepalive_sec: 60
+
 poll_interval_seconds: 60
 ```
 
@@ -462,6 +485,7 @@ poll_interval_seconds: 60
 | GoogleTest | 单元测试框架   | TDD 核心                      |
 | yaml-cpp   | YAML 配置解析  | 解析采集配置文件               |
 | spdlog     | 日志库         | 结构化日志输出                 |
+| Eclipse Paho MQTT C | MQTT 客户端 | 主程序 `dlt645_collector` 静态链接，用于上报 |
 
 串口通信直接使用 Linux termios API，不引入额外串口库。
 

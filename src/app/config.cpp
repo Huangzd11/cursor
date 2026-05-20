@@ -77,6 +77,23 @@ std::optional<AppConfig> Config::load(const std::string& filepath) {
 
         config.poll_interval_seconds = root["poll_interval_seconds"].as<int>(60);
 
+        if (const auto mq = root["mqtt"]) {
+            auto& m = config.mqtt;
+            m.enabled = mq["enabled"].as<bool>(false);
+            m.gateway_id = mq["gateway_id"].as<std::string>("");
+            m.broker = mq["broker"].as<std::string>("");
+            m.port = mq["port"].as<int>(1883);
+            m.tls = mq["tls"].as<bool>(false);
+            m.ca_file = mq["ca_file"].as<std::string>("");
+            m.username = mq["username"].as<std::string>("");
+            m.password = mq["password"].as<std::string>("");
+            m.client_id = mq["client_id"].as<std::string>("");
+            m.topic_prefix = mq["topic_prefix"].as<std::string>("dlt645");
+            m.qos = mq["qos"].as<int>(1);
+            m.keepalive_sec = mq["keepalive_sec"].as<int>(60);
+            m.max_queue = static_cast<std::size_t>(mq["max_queue"].as<int>(512));
+        }
+
         return config;
     } catch (const std::exception& e) {
         SPDLOG_ERROR("加载配置文件失败: {}", e.what());
@@ -119,6 +136,27 @@ std::vector<std::string> Config::validate(const AppConfig& config) {
 
     if (config.poll_interval_seconds <= 0) {
         errors.push_back("轮询间隔必须大于0");
+    }
+
+    if (config.mqtt.enabled) {
+        if (config.mqtt.tls) {
+            errors.push_back("mqtt.tls: 当前版本暂不支持 TLS，请将 mqtt.tls 设为 false");
+        }
+        if (config.mqtt.gateway_id.empty()) {
+            errors.push_back("mqtt.enabled 为 true 时 mqtt.gateway_id 不能为空");
+        }
+        if (config.mqtt.broker.empty()) {
+            errors.push_back("mqtt.enabled 为 true 时 mqtt.broker 不能为空");
+        }
+        if (config.mqtt.port <= 0 || config.mqtt.port > 65535) {
+            errors.push_back("mqtt.port 无效（应为 1~65535）");
+        }
+        if (config.mqtt.qos < 0 || config.mqtt.qos > 2) {
+            errors.push_back("mqtt.qos 必须在 0~2");
+        }
+        if (config.mqtt.max_queue == 0) {
+            errors.push_back("mqtt.max_queue 必须大于 0");
+        }
     }
 
     return errors;

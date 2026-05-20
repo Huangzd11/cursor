@@ -190,6 +190,7 @@ em645/
 serial?: { device, baudrate, databits?, stopbits?, parity? }   # 可选，各表 serial 默认值
 meters: [ { address, name, enabled, serial }, ... ]
 data_items: [ { di, name, enabled, length, decimal, unit }, ... ]
+mqtt?: { enabled, gateway_id, broker, port, tls, ... }       # 可选，MQTT 上报
 poll_interval_seconds: <int>
 ```
 
@@ -243,6 +244,7 @@ poll_interval_seconds: <int>
 | GoogleTest | v1.14.0 | 单元测试、Mock | FetchContent（仅宿主机） |
 | yaml-cpp | 0.8.0 | YAML 配置解析 | FetchContent |
 | spdlog | v1.14.1 | 结构化日志 | FetchContent |
+| Eclipse Paho MQTT C | v1.3.13 | MQTT 上报（主程序） | FetchContent（URL 源码包） |
 
 ### 5.3 系统 API
 
@@ -366,6 +368,25 @@ ctest --test-dir build --output-on-failure
 | decimal | int | 是 | 小数位数 |
 | unit | string | 是 | 单位，如 `kWh`、`V`；无量纲可为空字符串 |
 
+#### mqtt（MQTT 上报，可选）
+
+首版为 **tcp 明文**（`mqtt.tls` 必须为 `false`）。详见 [mqtt-reporting-plan.md](mqtt-reporting-plan.md)。
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| enabled | bool | 否 | `true` 时连接 `broker` 并发布 JSON |
+| gateway_id | string | 条件 | `enabled: true` 时必填，用于 Topic 与 Payload |
+| broker | string | 条件 | `enabled: true` 时必填，主机名或 IP |
+| port | int | 否 | 默认 `1883` |
+| tls | bool | 否 | 当前版本必须为 `false`（不支持 MQTTS） |
+| ca_file | string | 否 | 预留，TLS 启用后使用 |
+| username / password | string | 否 | 可选认证 |
+| client_id | string | 否 | 空则自动生成 `dlt645-{gateway_id}` |
+| topic_prefix | string | 否 | 默认 `dlt645` |
+| qos | int | 否 | `0`~`2`，默认 `1` |
+| keepalive_sec | int | 否 | 默认 `60` |
+| max_queue | int | 否 | 内存队列上限，默认 `512`，满则丢弃并节流告警 |
+
 #### poll_interval_seconds
 
 两轮完整轮询之间的间隔（秒），整型，建议 ≥ 10。
@@ -378,7 +399,8 @@ ctest --test-dir build --output-on-failure
 - 对**启用**的电表，必须能解析出非空的串口 `device`（表级 `serial` 或根级 `serial` 合并后）；
 - 电表地址为 12 位十六进制；
 - DI 为 8 位十六进制；
-- 波特率在支持范围内。
+- 波特率在支持范围内；
+- 若 `mqtt.enabled: true`：`mqtt.gateway_id`、`mqtt.broker` 必填；`mqtt.tls` 必须为 `false`；`mqtt.port` 在 1~65535；`mqtt.qos` 在 0~2。
 
 ### 7.4 部署与运行
 
@@ -422,4 +444,5 @@ cd /opt/dlt645 && ./dlt645_collector collector.yaml
 | [project.md](project.md) | 本文档：需求、架构、计划、使用指南 |
 | [design.md](design.md) | 协议要点、模块接口、配置示例 |
 | [build.md](build.md) | 本地测试与 OpenWrt 交叉编译部署 |
+| [mqtt-reporting-plan.md](mqtt-reporting-plan.md) | MQTT 上报：Topic/Payload、配置草案、分阶段实施 |
 | [technical-highlights.md](technical-highlights.md) | 技术难点、创新点界定与工程亮点 |

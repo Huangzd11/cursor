@@ -17,7 +17,9 @@ class Scheduler {
 public:
     using ResultCallback = std::function<void(
         const std::string& meter_name,
+        const std::string& meter_address_hex,
         const std::string& item_name,
+        const std::string& di_hex,
         MeterReader::ErrorCode code,
         std::optional<MeterReader::ReadResult> result)>;
 

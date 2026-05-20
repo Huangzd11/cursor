@@ -12,20 +12,20 @@ meters:
       baudrate: 2400
   - address: "000000000002"
     name: "meter-2"
-    enabled: true
+    enabled: false
     serial:
       device: "/dev/plugin/ttyRS0_3"
       baudrate: 2400
 
 data_items:
   - di: "00010000"
-    name: "FwdActE"
+    name: "ActiveTotalE"
     enabled: true
     length: 4
     decimal: 2
     unit: "kWh"
   - di: "00020000"
-    name: "RevActE"
+    name: "ReverseTotalE"
     enabled: true
     length: 4
     decimal: 2
@@ -62,3 +62,19 @@ data_items:
     unit: ""
 
 poll_interval_seconds: 120
+
+# MQTT 上报（详见 document/mqtt-reporting-plan.md）
+mqtt:
+  enabled: false
+  gateway_id: "gw-openwrt-01"
+  broker: "127.0.0.1"
+  port: 1883
+  tls: false
+  # ca_file: "/etc/ssl/certs/ca.crt"
+  # username: ""
+  # password: ""
+  # client_id: "dlt645-gw-01"
+  topic_prefix: "dlt645"
+  qos: 1
+  keepalive_sec: 60
+  max_queue: 512

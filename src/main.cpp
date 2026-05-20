@@ -1,5 +1,4 @@
 #include <csignal>
-#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -8,6 +7,7 @@
 #include "app/config.h"
 #include "app/logging.h"
 #include "app/meter_reader.h"
+#include "app/mqtt_reporter.h"
 #include "app/result_reporter.h"
 #include "app/scheduler.h"
 #include "transport/frame_transceiver.h"
@@ -44,6 +44,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const dlt645::MqttConfig mqtt_cfg = config->mqtt;
+
     std::vector<std::shared_ptr<dlt645::MeterReader>> readers;
     readers.reserve(config->meters.size());
 
@@ -66,12 +68,15 @@ int main(int argc, char* argv[]) {
     dlt645::Scheduler scheduler(std::move(*config), std::move(readers));
     g_scheduler = &scheduler;
 
+    dlt645::MqttReporter mqtt(mqtt_cfg);
     dlt645::ResultReporter reporter;
     scheduler.set_result_callback(
-        [&reporter](const std::string& meter, const std::string& item,
-                    dlt645::MeterReader::ErrorCode code,
-                    std::optional<dlt645::MeterReader::ReadResult> result) {
-            reporter.report(meter, item, code, result);
+        [&reporter, &mqtt](const std::string& meter_name, const std::string& meter_address_hex,
+                           const std::string& item_name, const std::string& di_hex,
+                           dlt645::MeterReader::ErrorCode code,
+                           std::optional<dlt645::MeterReader::ReadResult> result) {
+            reporter.report(meter_name, item_name, code, result);
+            mqtt.report(meter_name, meter_address_hex, item_name, di_hex, code, result);
         });
 
     std::signal(SIGINT, signal_handler);

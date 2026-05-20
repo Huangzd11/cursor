@@ -1,6 +1,8 @@
 #include "app/scheduler.h"
 
 #include <chrono>
+#include <iomanip>
+#include <sstream>
 #include <thread>
 
 #include <spdlog/spdlog.h>
@@ -54,10 +56,15 @@ void Scheduler::poll_once() {
                 continue;
             }
 
+            std::ostringstream di_oss;
+            di_oss << std::uppercase << std::hex << std::setfill('0') << std::setw(8)
+                   << static_cast<unsigned>(item.di);
+            const std::string di_hex = di_oss.str();
+
             auto [code, result] = reader->read_data(meter.name, meter.address, item);
 
             if (callback_) {
-                callback_(meter.name, item.name, code, result);
+                callback_(meter.name, meter.address.to_string(), item.name, di_hex, code, result);
             }
         }
     }

@@ -15,7 +15,8 @@ fi
 # OpenWrt 工具链 gcc 会检查 STAGING_DIR；须在 configure/build 全程导出
 export STAGING_DIR="${TOOLCHAIN_DIR}"
 
-cmake -S "${ROOT}" -B "${BUILD_DIR}" \
+# -Wno-dev：抑制 Paho 等第三方 CMakeLists 中 CMP0048 等开发者警告（不影响产物）
+cmake -Wno-dev -S "${ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${ROOT}/cmake/openwrt-aarch64.cmake" \
     -DCMAKE_BUILD_TYPE=Release
 

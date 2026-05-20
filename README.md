@@ -17,3 +17,4 @@
 
 - 项目说明：[document/project.md](document/project.md)（需求、架构、数据模型、开发计划、使用指南）
 - 模块设计：[document/design.md](document/design.md)
+- MQTT 上报规划：[document/mqtt-reporting-plan.md](document/mqtt-reporting-plan.md)
