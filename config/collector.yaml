@@ -18,12 +18,12 @@ meters:
       baudrate: 2400
 
 data_items:
-  - di: "00010000"
+  - di: "00010000"  # 数据标识
     name: "ActiveTotalE"  # 正向有功总电能
     enabled: true
-    length: 4
-    decimal: 2
-    unit: "kWh"
+    length: 4 # 长度
+    decimal: 2  #小数位
+    unit: "kWh"  # 单位
   - di: "00020000"
     name: "ReverseTotalE"  # 反向有功总电能
     enabled: true
