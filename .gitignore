@@ -3,6 +3,8 @@ build/
 build-cross/
 cmake-build-*/
 
+# 交叉编译工具链压缩包体积大且不应进 Git（自行放置或从内部源获取）
+openwrt-gcc-8.3.0.tar.gz
 # 解压后的交叉编译工具链（由 openwrt-gcc-8.3.0.tar.gz 解压）
 openwrt-gcc-8.3.0/
 
